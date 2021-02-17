@@ -1,0 +1,31 @@
+A few general notes:
+- "Bytes" always refer to Uint8Arrays. Byte arrays are one of the primary structures used.
+- Text is always encoded as UTF-8.
+- Many function follow the "destinationFromSource" naming scheme.
+
+Type notation:
+- "T" refers to an object of type T.
+- "A | B" refers to an object of type A, or an object of type B.
+- "T?" refers to an object of type T or null/undefined. It's a shorthand for "(T | null)".
+- "A, B, C --> R" refers to a function taking parameters of type A, B and C, and returning a value of type R.
+- "A [constraint, ...]" refers to a type with additional constraints.
+- "(...)" is used to group expressions.
+- "new" is used as return type of constructors
+
+Basic types:
+- null: null or undefined
+- Boolean: true or false
+- Int: a number is used as integer
+- Uint: a number is used as unsigned integer
+- Number: any number
+- String: JavaScript string
+- Array: a JavaScript array, usually with a type constraint
+- Object: any JavaScript object
+- Uint8Array: used for byte sequences
+- Any: any value, including null/undefined
+
+Type examples:
+- "Uint8Array?, Uint8Array? --> Boolean" is a function which takes two Uint8Arrays (or null), and returned true or false.
+- "Uint8Array --> Hash? | null --> null" is a function which takes a Uint8Array, and returns a Hash or null. If null is passed, null is returned.
+- "Uint8Array --> new" is a function which constructs an object (with the function being the constructor)
+- "String -->" is a function taking a string, and returning nothing.

@@ -1,0 +1,127 @@
+#! /usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+console.log('Building continuously. Press Ctrl-C to quit.');
+
+var lastChange = 0;
+var includedFiles = [];
+setInterval(buildIfNecessary, 1000);
+
+function buildIfNecessary() {
+	var newestChange = 1;
+	for (var file of includedFiles)
+		newestChange = Math.max(newestChange, mtime(file));
+
+	if (newestChange <= lastChange) return;
+	rebuild('condensation.build.js', 'condensation.js');
+	rebuild('condensation-nodejs.build.js', 'condensation-nodejs.js');
+}
+
+function mtime(file) {
+	try {
+		var stat = fs.statSync(file);
+		return stat.mtimeMs;
+	} catch (e) {
+		return 0;
+	}
+}
+
+function rebuild(buildFile, destinationFile) {
+	// Recursively include all files
+	var output = [];
+	includedFiles = [];
+	includeFile(buildFile, '');
+
+	function includeFile(file, indent) {
+		includedFiles.push(file);
+		lastChange = Math.max(lastChange, mtime(file));
+
+		var folder = path.dirname(file);
+		var content = fs.readFileSync(file, 'utf8');
+		for (var line of content.split(/\n/)) {
+			var includeMatch = line.match(/^(\s*)INCLUDE\s+(.*?)\s*$/);
+			if (includeMatch) {
+				includeFile(folder + '/' + includeMatch[2], indent + includeMatch[1]);
+				continue;
+			}
+
+			output.push(indent + line);
+		}
+	}
+
+	// Process byte strings
+	var byteStrings = {};
+	for (var i = 0; i < output.length; i++)
+		output[i] = output[i].replace(/'#(.*?)#'/g, addByteString);
+
+	function addByteString(match, text) {
+		var key = 'b_' + text.replace(/[^a-zA-Z0-9]/g, '_');
+		byteStrings[key] = text;
+		return key;
+	}
+
+	// Generate the version and all byte strings
+	var buildDate = new Date(lastChange);
+	for (var i = 0; i < output.length; i++) {
+		var line = output[i];
+
+		var byteStringMatch = line.match(/^(\s*)BYTE\s+STRINGS\s*$/);
+		if (byteStringMatch) output[i] = generateByteStrings(byteStringMatch[1]);
+
+		var versionMatch = line.match(/^(\s*)VERSION\s*$/);
+		if (versionMatch) output[i] = generateVersion(versionMatch[1]);
+	}
+
+	function generateVersion(indent) {
+		var lines = [];
+		var year = buildDate.getUTCFullYear();
+		var month = buildDate.getUTCMonth() + 1;
+		var day = buildDate.getUTCDate();
+		var version = 'condensation.js, ' + year + '-' + twoDigits(month) + '-' + twoDigits(day);
+		lines.push(indent + 'cn.version = \'' + version + '\';');
+		lines.push(indent + 'cn.versionBytes = ' + uint8Array(version) + ';');
+		return lines.join('\n');
+
+		function twoDigits(value) {
+			return (value < 10 ? '0' : '') + value;
+		}
+	}
+
+	function generateByteStrings(indent) {
+		var lines = [];
+		for (var key in byteStrings) {
+			var text = byteStrings[key];
+			lines.push(indent + 'var ' + key + ' = ' + uint8Array(text) + ';');
+		}
+
+		return lines.join('\n');
+	}
+
+	function uint8Array(text) {
+		var charCodes = [];
+		for (var i = 0; i < text.length; i++)
+			charCodes.push(text.charCodeAt(i));
+		return 'new Uint8Array([' + charCodes.join(', ') + '])';
+	}
+
+	// Post processing
+	for (var i = 0; i < output.length; i++)
+		output[i] = rtrim(output[i]);
+
+	function rtrim(text) {
+		while (text.length > 0 && isWhitespace(text.charCodeAt(text.length - 1)))
+			text = text.substr(0, text.length - 1);
+		return text;
+
+		function isWhitespace(charCode) {
+			return charCode == 9 || charCode == 10 || charCode == 13;
+		}
+	}
+
+	// Write the output file
+	fs.writeFileSync(destinationFile, output.join('\n'));
+	console.log(buildDate.toISOString() + ' ' + destinationFile + ' written');
+}
